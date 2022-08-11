@@ -1,0 +1,60 @@
+version: '3.8'
+
+services:
+  postgres:
+    container_name: postgres
+    image: postgres:14.2-alpine
+    networks:
+      - network
+    ports:
+      - 5432:5432
+    environment:
+      POSTGRES_USER: username
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: app
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U username -d app" ]
+      interval: 5s
+      timeout: 5s
+      retries: 3
+
+  app:
+    container_name: app
+    build:
+      context: ../../
+      dockerfile: deploy/docker/Dockerfile
+    ports:
+      - 3000:3000
+    environment:
+      DATABASE_URL: 'postgresql://username:password@postgres/app'
+      ENV: 'development'
+      SCRIPT: start_app.sh
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:3000/api/v1/healthcheck/" ]
+      interval: 5s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - network
+
+  worker:
+    container_name: worker
+    build:
+      context: ../../
+      dockerfile: deploy/docker/Worker.Dockerfile
+    environment:
+      DATABASE_URL: 'postgresql://username:password@postgres/app'
+      ENV: 'development'
+      SCRIPT: start_worker.sh
+    depends_on:
+      app:
+        condition: service_healthy
+    networks:
+      - network
+
+networks:
+  network:
